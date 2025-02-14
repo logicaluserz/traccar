@@ -30,6 +30,6 @@ public class ITR120Protocol extends BaseProtocol {
                 pipeline.addLast(new ITR120ProtocolEncoder(ITR120Protocol.this)); // Encoder de comandos
                 pipeline.addLast(new ITR120ProtocolDecoder(ITR120Protocol.this)); // Decodificador de pacotes
             }
-        });
+        }); // <-- No trailing spaces here
     }
 }
