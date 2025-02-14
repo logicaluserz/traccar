@@ -18,7 +18,6 @@ import java.util.Date;
 
 public class ITR120ProtocolDecoder extends BaseProtocolDecoder {
 
-    // Identificadores de pacote do iTR120
     private static final int MSG_LOGIN = 0x01;
     private static final int MSG_HEARTBEAT = 0x03;
     private static final int MSG_LOCATION = 0x12;
@@ -34,14 +33,13 @@ public class ITR120ProtocolDecoder extends BaseProtocolDecoder {
 
         ByteBuf buf = (ByteBuf) msg;
 
-        // Verificar marcador inicial (0x28 0x28)
         if (buf.readUnsignedShort() != 0x2828) {
             return null;
         }
 
-        int pid = buf.readUnsignedByte(); // PID
-        int size = buf.readUnsignedShort(); // Tamanho do conteúdo
-        int sequence = buf.readUnsignedShort(); // Capturar sequence
+        int pid = buf.readUnsignedByte();
+        int size = buf.readUnsignedShort();
+        int sequence = buf.readUnsignedShort();
 
         Position position = new Position(getProtocolName());
         DeviceSession deviceSession = getDeviceSession(channel, remoteAddress);
@@ -67,90 +65,38 @@ public class ITR120ProtocolDecoder extends BaseProtocolDecoder {
     }
 
     private Object decodeLogin(Channel channel, ByteBuf buf, DeviceSession deviceSession, int sequence) {
-
-        // Decodificar pacote de login (PID 0x01)
-        String imei = String.format("%015d", buf.readLong()); // IMEI (8 bytes)
-        buf.readUnsignedByte(); // Language
-        buf.readByte(); // Timezone
-        buf.readUnsignedShort(); // Sys Ver
-        buf.readUnsignedShort(); // App Ver
-        buf.readUnsignedShort(); // PS Ver
-        buf.readUnsignedShort(); // PS OSize
-        buf.readUnsignedShort(); // PS CSize
-        buf.readUnsignedShort(); // PS Sum16
-
-        // Enviar resposta de login (ACK)
-        ByteBuf response = Unpooled.buffer();
-        response.writeShort(0x2828); // Mark
-        response.writeByte(MSG_LOGIN); // PID
-        response.writeShort(0x0009); // Size
-        response.writeShort(sequence); // Sequence
-        response.writeInt((int) (System.currentTimeMillis() / 1000)); // Time (UTC)
-        response.writeShort(0x01); // Protocol version
-        response.writeByte(0x00); // PS Action
-        channel.writeAndFlush(new NetworkMessage(response, channel.remoteAddress()));
-
+        String imei = String.format("%015d", buf.readLong());
+        buf.skipBytes(15); // Ignorar campos não essenciais
+        sendAck(channel, MSG_LOGIN, sequence);
         return null;
     }
 
     private Object decodeHeartbeat(Channel channel, ByteBuf buf, Position position, int sequence) {
-
-        // Decodificar pacote de heartbeat (PID 0x03)
-        int status = buf.readUnsignedShort(); // Status (16 bits)
-        position.set(Position.KEY_IGNITION, BitUtil.check(status, 2)); // Bit 2: ACC
-        position.set(Position.KEY_STATUS, status);
-
+        position.set(Position.KEY_STATUS, buf.readUnsignedShort());
         sendAck(channel, MSG_HEARTBEAT, sequence);
         return position;
     }
 
     private Object decodeLocation(Channel channel, ByteBuf buf, Position position, int sequence) {
-
-        // Decodificar dados de posição (PID 0x12)
-        long time = buf.readUnsignedInt(); // Timestamp UNIX
-        position.setTime(new Date(time * 1000));
-
-        int mask = buf.readUnsignedByte(); // Máscara de dados válidos
-
-        // Latitude (32 bits signed, big-endian)
-        int latitudeRaw = buf.readInt();
-        double latitude = latitudeRaw / 1800000.0;
-        position.setLatitude(latitude);
-
-        // Longitude (32 bits signed, big-endian)
-        int longitudeRaw = buf.readInt();
-        double longitude = longitudeRaw / 1800000.0;
-        position.setLongitude(longitude);
-
-        if (BitUtil.check(mask, 0)) { // GPS fixo
-            position.setValid(true);
-            position.setAltitude(buf.readShort()); // Altitude (metros)
-            position.setSpeed(buf.readUnsignedShort()); // Velocidade (km/h)
-            position.setCourse(buf.readUnsignedShort()); // Direção (graus)
-            position.set(Position.KEY_SATELLITES, buf.readUnsignedByte()); // Satélites
-        }
-
-        // Status do dispositivo (16 bits)
-        int status = buf.readUnsignedShort();
-        position.set(Position.KEY_IGNITION, BitUtil.check(status, 2)); // Bit 2: Ignition
-        position.set(Position.KEY_STATUS, status);
-
+        position.setTime(new Date(buf.readUnsignedInt() * 1000));
+        buf.readUnsignedByte(); // Mask
+        position.setLatitude(buf.readInt() / 1800000.0);
+        position.setLongitude(buf.readInt() / 1800000.0);
         sendAck(channel, MSG_LOCATION, sequence);
         return position;
     }
 
     private Object decodeCommandResponse(Channel channel, ByteBuf buf, Position position, int sequence) {
-        // Implementação básica para resposta de comando
         sendAck(channel, MSG_COMMAND, sequence);
         return position;
     }
 
     private void sendAck(Channel channel, int pid, int sequence) {
         ByteBuf ack = Unpooled.buffer();
-        ack.writeShort(0x2828); // Mark
-        ack.writeByte(pid); // PID
-        ack.writeShort(0x0002); // Size (apenas sequence)
-        ack.writeShort(sequence); // Sequence
+        ack.writeShort(0x2828);
+        ack.writeByte(pid);
+        ack.writeShort(0x0002);
+        ack.writeShort(sequence);
         channel.writeAndFlush(new NetworkMessage(ack, channel.remoteAddress()));
     }
 }
