@@ -11,26 +11,22 @@ import org.traccar.session.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.BitUtil;
-import org.traccar.helper.Checksum;
-import org.traccar.helper.DateBuilder;
 import org.traccar.model.Position;
 
 import java.net.SocketAddress;
-import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
 public class ITR120ProtocolDecoder extends BaseProtocolDecoder {
 
-    public ITR120ProtocolDecoder(Protocol protocol) {
-        super(protocol);
-    }
-
-    // Identificadores de pacote do iTR120 (baseado no documento)
+    // Identificadores de pacote do iTR120
     private static final int MSG_LOGIN = 0x01;
     private static final int MSG_HEARTBEAT = 0x03;
     private static final int MSG_LOCATION = 0x12;
-    private static final int MSG_WARNING = 0x14;
     private static final int MSG_COMMAND = 0x80;
+
+    public ITR120ProtocolDecoder(Protocol protocol) {
+        super(protocol);
+    }
 
     @Override
     protected Object decode(
@@ -45,7 +41,7 @@ public class ITR120ProtocolDecoder extends BaseProtocolDecoder {
 
         int pid = buf.readUnsignedByte(); // PID
         int size = buf.readUnsignedShort(); // Tamanho do conteúdo
-        int sequence = buf.readUnsignedShort(); // Número de sequência
+        int sequence = buf.readUnsignedShort(); // Capturar sequence
 
         Position position = new Position(getProtocolName());
         DeviceSession deviceSession = getDeviceSession(channel, remoteAddress);
@@ -57,20 +53,20 @@ public class ITR120ProtocolDecoder extends BaseProtocolDecoder {
 
         switch (pid) {
             case MSG_LOGIN:
-                return decodeLogin(channel, buf, deviceSession);
+                return decodeLogin(channel, buf, deviceSession, sequence);
             case MSG_HEARTBEAT:
-                return decodeHeartbeat(channel, buf, position);
+                return decodeHeartbeat(channel, buf, position, sequence);
             case MSG_LOCATION:
-                return decodeLocation(channel, buf, position);
+                return decodeLocation(channel, buf, position, sequence);
             case MSG_COMMAND:
-                return decodeCommandResponse(channel, buf, position);
+                return decodeCommandResponse(channel, buf, position, sequence);
             default:
-                sendAck(channel, pid, sequence); // Responder ACK para pacotes não tratados
+                sendAck(channel, pid, sequence);
                 return null;
         }
     }
 
-    private Object decodeLogin(Channel channel, ByteBuf buf, DeviceSession deviceSession) {
+    private Object decodeLogin(Channel channel, ByteBuf buf, DeviceSession deviceSession, int sequence) {
 
         // Decodificar pacote de login (PID 0x01)
         String imei = String.format("%015d", buf.readLong()); // IMEI (8 bytes)
@@ -97,7 +93,7 @@ public class ITR120ProtocolDecoder extends BaseProtocolDecoder {
         return null;
     }
 
-    private Object decodeHeartbeat(Channel channel, ByteBuf buf, Position position) {
+    private Object decodeHeartbeat(Channel channel, ByteBuf buf, Position position, int sequence) {
 
         // Decodificar pacote de heartbeat (PID 0x03)
         int status = buf.readUnsignedShort(); // Status (16 bits)
@@ -108,7 +104,7 @@ public class ITR120ProtocolDecoder extends BaseProtocolDecoder {
         return position;
     }
 
-    private Object decodeLocation(Channel channel, ByteBuf buf, Position position) {
+    private Object decodeLocation(Channel channel, ByteBuf buf, Position position, int sequence) {
 
         // Decodificar dados de posição (PID 0x12)
         long time = buf.readUnsignedInt(); // Timestamp UNIX
@@ -140,6 +136,12 @@ public class ITR120ProtocolDecoder extends BaseProtocolDecoder {
         position.set(Position.KEY_STATUS, status);
 
         sendAck(channel, MSG_LOCATION, sequence);
+        return position;
+    }
+
+    private Object decodeCommandResponse(Channel channel, ByteBuf buf, Position position, int sequence) {
+        // Implementação básica para resposta de comando
+        sendAck(channel, MSG_COMMAND, sequence);
         return position;
     }
 
