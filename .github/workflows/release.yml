@@ -1,4 +1,4 @@
-name: Build and Release Installers
+name: Build Installers
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ on:
         default: 'preview'
 
 jobs:
-  build_and_release:
+  build:
     runs-on: ubuntu-22.04
 
     steps:
@@ -17,6 +17,7 @@ jobs:
         with:
           fetch-depth: 0
           submodules: true
+
       - run: git checkout ${{ github.ref_name }}
         working-directory: ./traccar-web
 
@@ -42,53 +43,27 @@ jobs:
           sudo apt-get update
           sudo apt-get install libgcc-s1:i386 libstdc++6:i386
           sudo apt-get install innoextract makeself wine32
-
       - name: Build installers
+        working-directory: ./setup
         run: |
           wget -q http://files.jrsoftware.org/is/5/isetup-5.5.6.exe
           wget -q https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.4+7/OpenJDK21U-jdk_x64_windows_hotspot_21.0.4_7.zip
           wget -q https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.4+7/OpenJDK21U-jdk_x64_linux_hotspot_21.0.4_7.tar.gz
           wget -q https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.4+7/OpenJDK21U-jdk_aarch64_linux_hotspot_21.0.4_7.tar.gz
           ./package.sh ${{ github.event.inputs.version }}
-        working-directory: ./setup
+
+      - name: Upload installers as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: traccar-installers
+          path: ./setup/traccar-*.zip
 
       - name: Create GitHub Release
         id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.version }}
-          release_name: Release ${{ github.event.inputs.version }}
+          tag_name: v${{ github.event.inputs.version }}
+          name: Release ${{ github.event.inputs.version }}
           draft: false
-          prerelease: ${{ contains(github.event.inputs.version, 'preview') }}
-
-      - name: Upload Release Assets
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./setup/traccar-${{ github.event.inputs.version }}-windows.zip
-          asset_name: traccar-${{ github.event.inputs.version }}-windows.zip
-          asset_content_type: application/zip
-
-      - name: Upload Release Asset (Linux x64)
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./setup/traccar-${{ github.event.inputs.version }}-linux-x64.zip
-          asset_name: traccar-${{ github.event.inputs.version }}-linux-x64.zip
-          asset_content_type: application/zip
-
-      - name: Upload Release Asset (Linux aarch64)
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./setup/traccar-${{ github.event.inputs.version }}-linux-aarch64.zip
-          asset_name: traccar-${{ github.event.inputs.version }}-linux-aarch64.zip
-          asset_content_type: application/zip
+          prerelease: true
+          files: ./setup/traccar-*.zip
