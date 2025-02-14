@@ -20,7 +20,6 @@ public class ITR120Protocol extends BaseProtocol {
                 Command.TYPE_ENGINE_STOP,
                 Command.TYPE_ENGINE_RESUME,
                 Command.TYPE_CUSTOM);
-        
         // Adicionar servidor para comunicação TCP
         addServer(new TrackerServer(config, getName(), false) {
             @Override
